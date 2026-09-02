@@ -5,7 +5,7 @@ Block design per trial:
     REST_PRE (20 s, timed) -> PLAN (self-paced, ENTER) -> SOLVE (self-paced, ENTER)
     -> REST_POST (45 s, timed) -> BREAK (120 s countdown, scramble the cube; ends on ENTER)
 
-Markers are pushed as int32 samples on an LSL stream (default name "Triggers",
+Markers are pushed as int32 samples on an LSL stream (default name "Trigger",
 type "Markers").  Codes are defined in triggers.py.
 
 Usage:
@@ -128,7 +128,7 @@ def main():
     p.add_argument("--break", dest="brk", type=float, default=120.0)
     p.add_argument("--scramble-len", type=int, default=20)
     p.add_argument("--seed", type=int, default=None, help="RNG seed for scrambles (default: derived from timestamp)")
-    p.add_argument("--stream-name", default="Triggers")
+    p.add_argument("--stream-name", default="Trigger")
     p.add_argument("--stream-type", default="Markers")
     p.add_argument("--source-id", default="cube-nirs")
     p.add_argument("--no-lsl", action="store_true", help="dry run without pushing LSL markers")
@@ -187,7 +187,7 @@ def main():
     # Scramble is done BEFORE the first trial (outside recording), so print it now.
     first_scramble = scramble_gen.generate(args.scramble_len, seed)
     print(f"\nScramble the cube now:\n\n    {first_scramble}\n")
-    print("Make sure Aurora is recording and the 'Triggers' LSL stream is selected.")
+    print("Make sure Aurora is recording and the 'Trigger' LSL stream is selected.")
     wait_enter("Press ENTER when the cube is scrambled and on the table to start the session...")
 
     completed_trials = 0

@@ -30,7 +30,7 @@ pilot and discussion with colleagues; keep the version number and date updated.
         Aurora (or equivalent) with an LSL marker stream enabled.
   \item Subject seated at a table, cube placed on the table in front of them.
   \item Trigger PC running \texttt{scripts/run\_session.py}, which opens an LSL
-        outlet named \texttt{Triggers} (type \texttt{Markers}, one \texttt{int32} channel).
+        outlet named \texttt{Trigger} (type \texttt{Markers}, one \texttt{int32} channel).
         Select this stream in the acquisition software before starting.
   \item The subject operates the script themselves (single-subject pilot): the
         ENTER key advances self-paced blocks. Keep the keyboard within reach of
@@ -101,7 +101,7 @@ Marker 60 (DNF) is pushed immediately after marker 40 for the same trial.
   \item Mount the cap, check signal quality, start the recording in Aurora.
   \item Start the script: \texttt{python scripts/run\_session.py --subject 1 --trials 5}.
         The session number auto-increments from \texttt{data/sessions.csv}.
-  \item Verify the \texttt{Triggers} stream is visible and selected in Aurora.
+  \item Verify the \texttt{Trigger} stream is visible and selected in Aurora.
   \item Scramble the cube with the first scramble the script prints, put it down,
         press ENTER. Marker 1 is sent and the first trial starts.
   \item Follow the on-screen instructions for each block.

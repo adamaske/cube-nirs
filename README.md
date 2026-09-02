@@ -34,7 +34,7 @@ python scripts/run_session.py --no-lsl --rest-pre 2 --rest-post 2 --break 5   # 
 python scripts/run_session.py --help
 ```
 
-Start the fNIRS recording first and select the `Triggers` LSL stream. After the session:
+Start the fNIRS recording first and select the `Trigger` LSL stream. After the session:
 
 ```
 python scripts/make_tables.py
