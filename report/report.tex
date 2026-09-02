@@ -1,0 +1,45 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\title{Rubik's Cube fNIRS -- Progress Report}
+\author{Adam Aske}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Summary}
+% Update after each session: where are we, what changed.
+Pilot started 2026-09-02. Protocol version 0.1 (see \texttt{protocol/protocol.tex}).
+
+\section{Sessions completed}
+Table generated from \texttt{data/sessions.csv} by \texttt{scripts/make\_tables.py}.
+
+\begin{center}
+\small
+\input{tables/sessions.tex}
+\end{center}
+
+\section{Solves}
+Table generated from \texttt{data/solves.csv}.
+
+\begin{center}
+\scriptsize
+\input{tables/solves.tex}
+\end{center}
+
+\section{Behavioural progress}
+% TODO: plot solve time vs. trial index across sessions (figures/solve_times.pdf)
+% \begin{figure}[h]\centering\includegraphics[width=0.8\linewidth]{figures/solve_times.pdf}\end{figure}
+
+\section{fNIRS results}
+% TODO: block averages for PLAN and SOLVE vs REST, prefrontal and occipital channels.
+
+\section{Session notes}
+\subsection*{Session 1 (pilot)}
+% Signal quality, problems with the script, things to change in the protocol.
+
+\end{document}

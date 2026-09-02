@@ -1,0 +1,17 @@
+data/raw/
+__pycache__/
+# LaTeX build artefacts
+protocol/*.aux
+protocol/*.log
+protocol/*.out
+protocol/*.fls
+protocol/*.fdb_latexmk
+protocol/*.synctex.gz
+report/*.aux
+report/*.log
+report/*.out
+report/*.fls
+report/*.fdb_latexmk
+report/*.synctex.gz
+report/*.toc
+*.pdf

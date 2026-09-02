@@ -1,0 +1,15 @@
+\begin{tabular}{r l p{8.5cm}}
+\toprule
+Code & Name & Meaning \\
+\midrule
+  1 & \texttt{SESSION\_START} & Session begins; recording should already be running \\
+  2 & \texttt{SESSION\_END} & Session ends; stop the recording after this \\
+  10 & \texttt{REST\_PRE} & Pre-trial rest onset (eyes open, cube on table, 20 s) \\
+  20 & \texttt{PLAN} & Planning/inspection onset: subject picks up the cube and inspects, no turning \\
+  30 & \texttt{SOLVE} & Solve onset: first turn allowed. Also marks end of PLAN \\
+  40 & \texttt{REST\_POST} & Post-trial rest onset: cube put down. Also marks end of SOLVE (solve time = t40 - t30) \\
+  50 & \texttt{BREAK} & Inter-trial break onset (2 min). Subject scrambles the cube during this \\
+  60 & \texttt{DNF} & Trial flagged as not properly solved / aborted by the subject \\
+  99 & \texttt{ABORT} & Session aborted by the experimenter \\
+\bottomrule
+\end{tabular}
