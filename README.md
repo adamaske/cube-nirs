@@ -3,7 +3,9 @@
 Rubik's Cube re-learning tracked with fNIRS (prefrontal + occipital).
 
 ```
-scripts/run_session.py   run one session: sends LSL markers, logs times, generates scrambles
+app/server/              session GUI backend: engine (state machine), FastAPI, LSL, file I/O
+app/web/                 Svelte frontend source; built output committed in app/web/dist/
+scripts/run_session.py   run one session in the terminal (thin CLI over app/server/engine.py)
 scripts/triggers.py      marker code table (single source of truth)
 scripts/scramble.py      random scramble generator
 scripts/make_tables.py   regenerate LaTeX tables from triggers.py and data/*.csv
@@ -26,12 +28,32 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Run a session
+## Run a session (GUI)
+
+```
+python -m app.server
+```
+
+Then open `http://localhost:8765/` (experimenter control panel),
+`http://localhost:8765/subject` on the second monitor (F11 for fullscreen),
+and `http://localhost:8765/dashboard` for past-session stats. The acquisition
+PC needs only Python; `app/web/dist/` is committed, so Node is a
+dev-machine-only dependency (`cd app/web && npm install && npm run build`
+after changing the frontend).
+
+## Run a session (terminal fallback)
 
 ```
 python scripts/run_session.py --subject 1 --trials 5
-python scripts/run_session.py --no-lsl --rest-pre 2 --rest-post 2 --break 5   # quick dry run
+python scripts/run_session.py --no-lsl --no-beep --rest-pre 2 --rest-post 2   # quick dry run
 python scripts/run_session.py --help
+```
+
+## Tests
+
+```
+pip install pytest httpx
+python -m pytest tests/
 ```
 
 Start the fNIRS recording first and select the `Trigger` LSL stream. After the session:

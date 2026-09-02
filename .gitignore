@@ -1,5 +1,8 @@
 data/raw/
 __pycache__/
+.venv/
+app/web/node_modules/
+.pytest_cache/
 # LaTeX build artefacts
 protocol/*.aux
 protocol/*.log

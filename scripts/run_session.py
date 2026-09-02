@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rubik's Cube fNIRS session runner.
+"""Rubik's Cube fNIRS session runner (terminal fallback for the GUI).
 
 Block design per trial:
     REST_PRE (20 s, timed) -> PLAN (self-paced, ENTER) -> SOLVE (self-paced, ENTER)
@@ -20,104 +20,33 @@ Controls during a session:
     ENTER  advance a self-paced block (PLAN -> SOLVE -> REST_POST) or end the break
     d      (typed before ENTER at the end of SOLVE) flag the solve as DNF
     Ctrl-C abort the session (ABORT marker is pushed, log is still written)
+
+This is a thin wrapper over app.server.engine; the GUI (`python -m app.server`)
+drives the exact same engine.
 """
 import argparse
-import csv
-import datetime as dt
-import json
 import logging
 import os
 import sys
+import threading
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from triggers import TRIGGERS, code  # noqa: E402
-import scramble as scramble_gen  # noqa: E402
-import beep as beep_mod  # noqa: E402
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.path.join(ROOT, "logs")
-DATA_DIR = os.path.join(ROOT, "data")
-SOLVES_CSV = os.path.join(DATA_DIR, "solves.csv")
-SESSIONS_CSV = os.path.join(DATA_DIR, "sessions.csv")
+sys.path.insert(0, ROOT)
+
+from app.server import engine  # noqa: E402
+from app.server.engine import Session, SessionConfig  # noqa: E402
+from app.server.lsl_out import MarkerOutlet, NullOutlet  # noqa: E402
+from app.server.store import Store  # noqa: E402
+from scripts import beep as beep_mod  # noqa: E402
+from scripts import scramble as scramble_gen  # noqa: E402
 
 
-# --------------------------------------------------------------------------- #
-# Marker outlet
-# --------------------------------------------------------------------------- #
-class MarkerOutlet:
-    def __init__(self, enabled: bool, name: str, stype: str, source_id: str):
-        self.enabled = enabled
-        self.outlet = None
-        self.lsl_clock = None
-        if enabled:
-            from pylsl import StreamInfo, StreamOutlet, local_clock
-            info = StreamInfo(name=name, type=stype, channel_count=1,
-                              nominal_srate=0, channel_format="int32",
-                              source_id=source_id)
-            self.outlet = StreamOutlet(info)
-            self.lsl_clock = local_clock
-            logging.info(f"LSL outlet '{name}' ({stype}, int32) source_id={source_id}")
-        else:
-            logging.warning("LSL disabled (--no-lsl): markers are only logged")
-
-    def push(self, name: str) -> dict:
-        c = code(name)
-        t_wall = time.time()
-        t_lsl = self.lsl_clock() if self.lsl_clock else None
-        if self.outlet is not None:
-            self.outlet.push_sample([c])
-        logging.info(f"MARKER {c:3d} {name}")
-        print(f"\n  >> marker {c} {name}")
-        return {"code": c, "name": name, "t_wall": t_wall, "t_lsl": t_lsl}
+class Beeper:
+    def cue(self, times: int = 1):
+        beep_mod.beep(times=times)
 
 
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
-def countdown(label: str, seconds: float, next_label: str):
-    """Blocking timed block with a live countdown."""
-    t0 = time.time()
-    while True:
-        remaining = seconds - (time.time() - t0)
-        if remaining <= 0:
-            print()
-            return
-        print(f"  [{label}] {remaining:6.1f} s left -> {next_label}   ", end="\r", flush=True)
-        time.sleep(0.1)
-
-
-def break_timer() -> float:
-    """Inter-trial break of free length. Shows elapsed time; ends on ENTER.
-    Returns the actual break duration in seconds."""
-    import threading
-    t0 = time.time()
-    done = threading.Event()
-    threading.Thread(target=lambda: (sys.stdin.readline(), done.set()), daemon=True).start()
-    while not done.is_set():
-        print(f"  [BREAK] {time.time() - t0:6.1f} s elapsed. Scramble, put the cube down, press ENTER to start the next trial   ",
-              end="\r", flush=True)
-        done.wait(0.1)
-    print()
-    return time.time() - t0
-
-
-def wait_enter(prompt: str) -> str:
-    return input(prompt).strip().lower()
-
-
-def append_csv(path: str, row: dict):
-    new = not os.path.exists(path)
-    with open(path, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if new:
-            w.writeheader()
-        w.writerow(row)
-
-
-# --------------------------------------------------------------------------- #
-# Main
-# --------------------------------------------------------------------------- #
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--subject", type=int, default=1)
@@ -135,133 +64,120 @@ def main():
     p.add_argument("--comment", default="")
     args = p.parse_args()
 
-    os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(DATA_DIR, exist_ok=True)
-
+    store = Store(ROOT)
     if args.session is None:
-        args.session = 1
-        if os.path.exists(SESSIONS_CSV):
-            with open(SESSIONS_CSV) as f:
-                rows = [r for r in csv.DictReader(f) if int(r["subject"]) == args.subject]
-            if rows:
-                args.session = max(int(r["session"]) for r in rows) + 1
+        args.session = store.next_session_number(args.subject)
 
+    config = SessionConfig(
+        subject=args.subject, session=args.session, trials=args.trials,
+        rest_pre=args.rest_pre, rest_post=args.rest_post,
+        scramble_len=args.scramble_len, seed=args.seed,
+        stream_name=args.stream_name, stream_type=args.stream_type,
+        source_id=args.source_id, no_lsl=args.no_lsl, no_beep=args.no_beep,
+        comment=args.comment,
+    )
+
+    ended = threading.Event()
+    printer_lock = threading.Lock()
+
+    def render(ev):
+        with printer_lock:
+            _render(ev)
+
+    def _render(ev):
+        cfg = config
+        if isinstance(ev, engine.MarkerPushed):
+            print(f"\n  >> marker {ev.code} {ev.name}")
+            if ev.name == "PLAN":
+                print("  [PLAN] Pick up the cube and inspect. Press ENTER at your FIRST TURN...", end="", flush=True)
+            elif ev.name == "SOLVE":
+                print("  [SOLVE] Solving... Press ENTER when solved and the cube is DOWN (type d + ENTER for DNF)...", end="", flush=True)
+            elif ev.name == "BREAK":
+                print(f"\n  [BREAK] Scramble the cube:\n\n      {session.scramble}\n")
+        elif isinstance(ev, engine.StateChanged):
+            if ev.state == engine.REST_PRE:
+                print(f"\n----- Trial {ev.trial}/{cfg.trials} -----")
+            elif ev.state == engine.DONE:
+                print("\nSession complete. Stop the recording now.")
+            elif ev.state == engine.ABORTED:
+                print("\nAborted.")
+        elif isinstance(ev, engine.Tick):
+            if ev.remaining is not None:
+                nxt = "PLAN" if ev.state == engine.REST_PRE else ("BREAK" if ev.trial < cfg.trials else "END")
+                print(f"  [REST] {ev.remaining:6.1f} s left -> {nxt}   ", end="\r", flush=True)
+            elif ev.state == engine.BREAK:
+                print(f"  [BREAK] {ev.elapsed:6.1f} s elapsed. Scramble, put the cube down, press ENTER to start the next trial   ",
+                      end="\r", flush=True)
+        elif isinstance(ev, engine.TrialCompleted):
+            t = ev.trial
+            print(f"  plan {t['plan_s']:.1f} s | solve {t['solve_s']:.1f} s" + ("  (DNF)" if t["dnf"] else ""))
+        elif isinstance(ev, engine.SessionEnded):
+            ended.set()
+
+    import datetime as dt
     started = dt.datetime.now()
-    stamp = started.strftime("%Y%m%d_%H%M%S")
-    base = f"sub-{args.subject:02d}_ses-{args.session:02d}_{stamp}"
-    seed = args.seed if args.seed is not None else int(started.timestamp())
-
+    base = f"sub-{args.subject:02d}_ses-{args.session:02d}_{started:%Y%m%d_%H%M%S}"
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[logging.FileHandler(os.path.join(LOG_DIR, base + ".log")), logging.StreamHandler()],
+        handlers=[logging.FileHandler(os.path.join(store.log_dir, base + ".log")),
+                  logging.StreamHandler()],
     )
     logging.getLogger().handlers[1].setLevel(logging.WARNING)
 
-    session = {
-        "subject": args.subject, "session": args.session, "started": started.isoformat(),
-        "params": {k: v for k, v in vars(args).items()}, "seed": seed,
-        "stream": {"name": args.stream_name, "type": args.stream_type, "source_id": args.source_id},
-        "triggers": {c: n for c, (n, _) in TRIGGERS.items()},
-        "markers": [], "trials": [], "completed": False,
-    }
+    try:
+        outlet = NullOutlet() if args.no_lsl else MarkerOutlet(args.stream_name, args.stream_type, args.source_id)
+    except Exception as e:
+        print(f"ERROR: could not create LSL outlet: {e}", file=sys.stderr)
+        print("Refusing to run unmarked. Use --no-lsl for an explicit dry run.", file=sys.stderr)
+        sys.exit(1)
 
-    def save():
-        with open(os.path.join(LOG_DIR, base + ".json"), "w") as f:
-            json.dump(session, f, indent=2)
+    session = Session(
+        config,
+        marker_sink=outlet,
+        beeper=engine.NullBeeper() if args.no_beep else Beeper(),
+        store=store,
+        scramble_fn=scramble_gen.generate,
+        emit=render,
+        started=started,
+    )
 
     print("=" * 70)
-    print(f" Rubik's Cube fNIRS  |  subject {args.subject}  session {args.session}  |  {started:%Y-%m-%d %H:%M}")
+    print(f" Rubik's Cube fNIRS  |  subject {args.subject}  session {args.session}  |  {session.started:%Y-%m-%d %H:%M}")
     print(f" {args.trials} trials: REST {args.rest_pre:.0f}s -> PLAN -> SOLVE -> REST {args.rest_post:.0f}s -> BREAK (ENTER)")
     print(f" LSL stream: {args.stream_name} ({args.stream_type})" + ("  [DISABLED]" if args.no_lsl else ""))
     print("=" * 70)
-
-    outlet = MarkerOutlet(not args.no_lsl, args.stream_name, args.stream_type, args.source_id)
-
-    def cue(times=1):
-        if not args.no_beep:
-            beep_mod.beep(times=times)
-
-    def mark(name):
-        m = outlet.push(name)
-        session["markers"].append(m)
-        save()
-        return m
-
-    # Scramble is done BEFORE the first trial (outside recording), so print it now.
-    first_scramble = scramble_gen.generate(args.scramble_len, seed)
-    print(f"\nScramble the cube now:\n\n    {first_scramble}\n")
+    print(f"\nScramble the cube now:\n\n    {session.first_scramble}\n")
     print("Make sure Aurora is recording and the 'Trigger' LSL stream is selected.")
-    wait_enter("Press ENTER when the cube is scrambled and on the table to start the session...")
+    print("Press ENTER when the cube is scrambled and on the table to start the session...", end="", flush=True)
 
-    completed_trials = 0
+    def stdin_reader():
+        """Feed each stdin line to the engine as an advance (buffered like the
+        old input() prompts: a line waits until a self-paced block accepts it)."""
+        for line in sys.stdin:
+            want_dnf = line.strip().lower().startswith("d")
+            while not ended.is_set():
+                st = session.state
+                if st in engine.SELF_PACED:
+                    if want_dnf and st == engine.SOLVE:
+                        session.flag_dnf()
+                    ok, _reason = session.advance(st)
+                    if ok:
+                        break
+                time.sleep(0.05)
+            if ended.is_set():
+                return
+
+    threading.Thread(target=stdin_reader, daemon=True).start()
+
+    session.start()
     try:
-        mark("SESSION_START")
-        scramble = first_scramble
-        for i in range(1, args.trials + 1):
-            trial = {"trial": i, "scramble": scramble, "dnf": False}
-            print(f"\n----- Trial {i}/{args.trials} -----")
-
-            m = mark("REST_PRE")
-            trial["t_rest_pre"] = m["t_lsl"] or m["t_wall"]
-            countdown("REST", args.rest_pre, "PLAN")
-
-            cue()
-            m = mark("PLAN")
-            trial["t_plan"] = m["t_lsl"] or m["t_wall"]
-            wait_enter("  [PLAN] Pick up the cube and inspect. Press ENTER at your FIRST TURN...")
-
-            m = mark("SOLVE")
-            trial["t_solve"] = m["t_lsl"] or m["t_wall"]
-            ans = wait_enter("  [SOLVE] Solving... Press ENTER when solved and the cube is DOWN (type d + ENTER for DNF)...")
-
-            m = mark("REST_POST")
-            trial["t_rest_post"] = m["t_lsl"] or m["t_wall"]
-            if ans.startswith("d"):
-                trial["dnf"] = True
-                mark("DNF")
-            trial["plan_s"] = round(trial["t_solve"] - trial["t_plan"], 3)
-            trial["solve_s"] = round(trial["t_rest_post"] - trial["t_solve"], 3)
-            print(f"  plan {trial['plan_s']:.1f} s | solve {trial['solve_s']:.1f} s" + ("  (DNF)" if trial["dnf"] else ""))
-            countdown("REST", args.rest_post, "BREAK" if i < args.trials else "END")
-            cue(times=1 if i < args.trials else 2)
-
-            session["trials"].append(trial)
-            completed_trials = i
-            save()
-
-            if i < args.trials:
-                scramble = scramble_gen.generate(args.scramble_len, seed + i)
-                mark("BREAK")
-                print(f"\n  [BREAK] Scramble the cube:\n\n      {scramble}\n")
-                trial["break_s"] = round(break_timer(), 1)
-                save()
-
-            append_csv(SOLVES_CSV, {
-                "subject": args.subject, "session": args.session, "trial": i,
-                "date": started.strftime("%Y-%m-%d"), "plan_s": trial["plan_s"],
-                "solve_s": trial["solve_s"], "dnf": int(trial["dnf"]),
-                "break_s": trial.get("break_s", ""), "scramble": trial["scramble"],
-            })
-
-        mark("SESSION_END")
-        session["completed"] = True
-        print("\nSession complete. Stop the recording now.")
+        while not ended.wait(0.2):
+            pass
     except KeyboardInterrupt:
-        print("\nAborted.")
-        mark("ABORT")
-    finally:
-        session["ended"] = dt.datetime.now().isoformat()
-        save()
-        solved = [t for t in session["trials"] if not t["dnf"]]
-        append_csv(SESSIONS_CSV, {
-            "subject": args.subject, "session": args.session, "date": started.strftime("%Y-%m-%d %H:%M"),
-            "trials_completed": completed_trials, "trials_planned": args.trials,
-            "mean_solve_s": round(sum(t["solve_s"] for t in solved) / len(solved), 2) if solved else "",
-            "best_solve_s": round(min(t["solve_s"] for t in solved), 2) if solved else "",
-            "completed": int(session["completed"]), "log": base, "comment": args.comment,
-        })
-        print(f"Log written: logs/{base}.json")
+        session.abort()
+        ended.wait(10)
+    print(f"Log written: logs/{session.base}.json")
 
 
 if __name__ == "__main__":

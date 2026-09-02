@@ -1,0 +1,132 @@
+{
+  "subject": 1,
+  "session": 1,
+  "started": "2026-09-02T22:17:33.490173",
+  "params": {
+    "subject": 1,
+    "session": 1,
+    "trials": 2,
+    "rest_pre": 0.2,
+    "rest_post": 0.2,
+    "scramble_len": 20,
+    "seed": 42,
+    "stream_name": "Trigger",
+    "stream_type": "Markers",
+    "source_id": "cube-nirs",
+    "no_lsl": true,
+    "no_beep": true,
+    "comment": "fixture"
+  },
+  "seed": 42,
+  "stream": {
+    "name": "Trigger",
+    "type": "Markers",
+    "source_id": "cube-nirs"
+  },
+  "triggers": {
+    "1": "SESSION_START",
+    "2": "SESSION_END",
+    "10": "REST_PRE",
+    "20": "PLAN",
+    "30": "SOLVE",
+    "40": "REST_POST",
+    "50": "BREAK",
+    "60": "DNF",
+    "99": "ABORT"
+  },
+  "markers": [
+    {
+      "code": 1,
+      "name": "SESSION_START",
+      "t_wall": 1788380253.4904058,
+      "t_lsl": null
+    },
+    {
+      "code": 10,
+      "name": "REST_PRE",
+      "t_wall": 1788380253.4905567,
+      "t_lsl": null
+    },
+    {
+      "code": 20,
+      "name": "PLAN",
+      "t_wall": 1788380253.6907928,
+      "t_lsl": null
+    },
+    {
+      "code": 30,
+      "name": "SOLVE",
+      "t_wall": 1788380253.691237,
+      "t_lsl": null
+    },
+    {
+      "code": 40,
+      "name": "REST_POST",
+      "t_wall": 1788380253.6914144,
+      "t_lsl": null
+    },
+    {
+      "code": 50,
+      "name": "BREAK",
+      "t_wall": 1788380253.8921356,
+      "t_lsl": null
+    },
+    {
+      "code": 10,
+      "name": "REST_PRE",
+      "t_wall": 1788380253.893377,
+      "t_lsl": null
+    },
+    {
+      "code": 20,
+      "name": "PLAN",
+      "t_wall": 1788380254.0938926,
+      "t_lsl": null
+    },
+    {
+      "code": 30,
+      "name": "SOLVE",
+      "t_wall": 1788380254.09433,
+      "t_lsl": null
+    },
+    {
+      "code": 40,
+      "name": "REST_POST",
+      "t_wall": 1788380254.0946255,
+      "t_lsl": null
+    },
+    {
+      "code": 2,
+      "name": "SESSION_END",
+      "t_wall": 1788380254.2955525,
+      "t_lsl": null
+    }
+  ],
+  "trials": [
+    {
+      "trial": 1,
+      "scramble": "B U2 L D B F R U D F2 U2 D2 B2 F' D' F' U B' L' D",
+      "dnf": false,
+      "t_rest_pre": 1788380253.4905567,
+      "t_plan": 1788380253.6907928,
+      "t_solve": 1788380253.691237,
+      "t_rest_post": 1788380253.6914144,
+      "plan_s": 0.0,
+      "solve_s": 0.0,
+      "break_s": 0.0
+    },
+    {
+      "trial": 2,
+      "scramble": "U' B R' B2 U' F' U2 R2 L2 F' R U R U F' D' F2 L2 D' U",
+      "dnf": false,
+      "t_rest_pre": 1788380253.893377,
+      "t_plan": 1788380254.0938926,
+      "t_solve": 1788380254.09433,
+      "t_rest_post": 1788380254.0946255,
+      "plan_s": 0.0,
+      "solve_s": 0.0
+    }
+  ],
+  "completed": true,
+  "ended": "2026-09-02T22:17:34.295926"
+}
