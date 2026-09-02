@@ -3,7 +3,7 @@
 
 Block design per trial:
     REST_PRE (20 s, timed) -> PLAN (self-paced, ENTER) -> SOLVE (self-paced, ENTER)
-    -> REST_POST (45 s, timed) -> BREAK (120 s countdown, scramble the cube; ends on ENTER)
+    -> REST_POST (45 s, timed) -> BREAK (free length, scramble the cube; ends on ENTER)
 
 Markers are pushed as int32 samples on an LSL stream (default name "Trigger",
 type "Markers").  Codes are defined in triggers.py.
@@ -11,7 +11,7 @@ type "Markers").  Codes are defined in triggers.py.
 Usage:
     python scripts/run_session.py --subject 1 --session 1 --trials 5
     python scripts/run_session.py --no-lsl          # dry run without pylsl
-    python scripts/run_session.py --scramble-len 25 --break 90
+    python scripts/run_session.py --scramble-len 25 --rest-post 60
 
 Controls during a session:
     ENTER  advance a self-paced block (PLAN -> SOLVE -> REST_POST) or end the break
@@ -83,20 +83,16 @@ def countdown(label: str, seconds: float, next_label: str):
         time.sleep(0.1)
 
 
-def break_countdown(seconds: float) -> float:
-    """Break that always ends on ENTER. Shows a countdown; ENTER before the
-    timer ends it early, after the timer we simply wait for ENTER.
+def break_timer() -> float:
+    """Inter-trial break of free length. Shows elapsed time; ends on ENTER.
     Returns the actual break duration in seconds."""
     import threading
     t0 = time.time()
     done = threading.Event()
     threading.Thread(target=lambda: (sys.stdin.readline(), done.set()), daemon=True).start()
     while not done.is_set():
-        remaining = seconds - (time.time() - t0)
-        if remaining > 0:
-            print(f"  [BREAK] {remaining:6.1f} s left. Scramble, put the cube down, press ENTER to start the next trial   ", end="\r", flush=True)
-        else:
-            print(f"  [BREAK] time is up ({-remaining:5.1f} s over). Put the cube down and press ENTER to start the next trial   ", end="\r", flush=True)
+        print(f"  [BREAK] {time.time() - t0:6.1f} s elapsed. Scramble, put the cube down, press ENTER to start the next trial   ",
+              end="\r", flush=True)
         done.wait(0.1)
     print()
     return time.time() - t0
@@ -125,7 +121,6 @@ def main():
     p.add_argument("--trials", type=int, default=5, help="number of solves (default 5)")
     p.add_argument("--rest-pre", type=float, default=20.0)
     p.add_argument("--rest-post", type=float, default=45.0)
-    p.add_argument("--break", dest="brk", type=float, default=120.0)
     p.add_argument("--scramble-len", type=int, default=20)
     p.add_argument("--seed", type=int, default=None, help="RNG seed for scrambles (default: derived from timestamp)")
     p.add_argument("--stream-name", default="Trigger")
@@ -172,7 +167,7 @@ def main():
 
     print("=" * 70)
     print(f" Rubik's Cube fNIRS  |  subject {args.subject}  session {args.session}  |  {started:%Y-%m-%d %H:%M}")
-    print(f" {args.trials} trials: REST {args.rest_pre:.0f}s -> PLAN -> SOLVE -> REST {args.rest_post:.0f}s -> BREAK {args.brk:.0f}s")
+    print(f" {args.trials} trials: REST {args.rest_pre:.0f}s -> PLAN -> SOLVE -> REST {args.rest_post:.0f}s -> BREAK (ENTER)")
     print(f" LSL stream: {args.stream_name} ({args.stream_type})" + ("  [DISABLED]" if args.no_lsl else ""))
     print("=" * 70)
 
@@ -222,19 +217,21 @@ def main():
 
             session["trials"].append(trial)
             completed_trials = i
-            append_csv(SOLVES_CSV, {
-                "subject": args.subject, "session": args.session, "trial": i,
-                "date": started.strftime("%Y-%m-%d"), "plan_s": trial["plan_s"],
-                "solve_s": trial["solve_s"], "dnf": int(trial["dnf"]), "scramble": scramble,
-            })
             save()
 
             if i < args.trials:
                 scramble = scramble_gen.generate(args.scramble_len, seed + i)
                 mark("BREAK")
                 print(f"\n  [BREAK] Scramble the cube:\n\n      {scramble}\n")
-                trial["break_s"] = round(break_countdown(args.brk), 1)
+                trial["break_s"] = round(break_timer(), 1)
                 save()
+
+            append_csv(SOLVES_CSV, {
+                "subject": args.subject, "session": args.session, "trial": i,
+                "date": started.strftime("%Y-%m-%d"), "plan_s": trial["plan_s"],
+                "solve_s": trial["solve_s"], "dnf": int(trial["dnf"]),
+                "break_s": trial.get("break_s", ""), "scramble": trial["scramble"],
+            })
 
         mark("SESSION_END")
         session["completed"] = True

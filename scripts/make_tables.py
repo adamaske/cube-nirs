@@ -61,9 +61,9 @@ def solves_table():
         return "\\emph{No solves recorded yet.}\n"
     body = "\n".join(
         f"  {r['subject']} & {r['session']} & {r['trial']} & {esc(r['date'])} & {r['plan_s']} & {r['solve_s']} & "
-        f"{'DNF' if r['dnf'] == '1' else ''} & \\texttt{{\\scriptsize {esc(r['scramble'])}}} \\\\"
+        f"{'DNF' if r['dnf'] == '1' else ''} & {r.get('break_s') or '--'} & \\texttt{{\\scriptsize {esc(r['scramble'])}}} \\\\"
         for r in rows)
-    return ("\\begin{tabular}{r r r l r r c l}\n\\toprule\nSub & Ses & Trial & Date & Plan (s) & Solve (s) & DNF & Scramble \\\\\n"
+    return ("\\begin{tabular}{r r r l r r c r l}\n\\toprule\nSub & Ses & Trial & Date & Plan (s) & Solve (s) & DNF & Break (s) & Scramble \\\\\n"
             f"\\midrule\n{body}\n\\bottomrule\n\\end{{tabular}}\n")
 
 

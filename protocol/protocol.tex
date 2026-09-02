@@ -40,8 +40,9 @@ pilot and discussion with colleagues; keep the version number and date updated.
 
 \section{Block design}
 One \emph{trial} is one solve. Each trial consists of the blocks in
-Table~\ref{tab:blocks}; trials are separated by a break during which the subject
-scrambles the cube using the scramble printed by the script. A session consists
+Table~\ref{tab:blocks}; trials are separated by a break of free length during which the subject
+scrambles the cube using the scramble printed by the script; the next trial is
+started manually with ENTER and the break duration is logged. A session consists
 of at least 5 trials.
 
 \begin{table}[h]
@@ -56,14 +57,14 @@ Block & Duration & Marker & Instruction \\
 \textsc{Plan}        & self-paced & 20 & Pick up the cube and inspect it. Plan the first step(s). No turns allowed. Press ENTER at the moment of the first turn. \\
 \textsc{Solve}       & self-paced & 30 & Solve the cube. When solved, put it down and press ENTER. Type \texttt{d} then ENTER if the solve failed (DNF). \\
 \textsc{Rest (post)} & 45 s & 40 & Sit still, eyes open, look at the cube on the table. \\
-\textsc{Break}       & $\geq$ 120 s & 50 & Relax, then scramble the cube with the printed scramble. Put it down and press ENTER to start the next trial. \\
+\textsc{Break}       & free (logged) & 50 & Relax, then scramble the cube with the printed scramble. Put it down and press ENTER to start the next trial. The break length is not fixed but is recorded. \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{center}
 \begin{tikzpicture}[x=0.9cm, every node/.style={font=\small}]
-  \foreach \x/\w/\name/\col in {0/2/Rest 20 s/gray!30, 2/2/Plan/blue!25, 4/3/Solve/red!25, 7/3/Rest 45 s/gray!30, 10/4/Break $\geq$120 s (scramble)/green!20} {
+  \foreach \x/\w/\name/\col in {0/2/Rest 20 s/gray!30, 2/2/Plan/blue!25, 4/3/Solve/red!25, 7/3/Rest 45 s/gray!30, 10/4/Break (free; scramble)/green!20} {
     \draw[fill=\col] (\x,0) rectangle (\x+\w,1) node[midway]{\name};
   }
   \draw[-{Latex}] (14,0.5) -- (15,0.5) node[right]{repeat $\times$ 5};
