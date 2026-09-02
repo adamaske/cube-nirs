@@ -119,15 +119,34 @@ def test_double_advance_second_rejected(harness):
     s, rec, *_ = harness()
     s.start()
     wait_for_state(s, engine.CONFIGURED)
-    # block the engine loop so the first advance stays pending
+    # hold the engine lock so the first advance cannot be consumed
+    # between the two calls (RLock: same-thread advance() still works)
     with s._lock:
-        pass
-    ok1, _ = s.advance(engine.CONFIGURED)
-    ok2, reason2 = s.advance(engine.CONFIGURED)
+        ok1, _ = s.advance(engine.CONFIGURED)
+        ok2, reason2 = s.advance(engine.CONFIGURED)
     assert ok1
     assert not ok2 and "pending" in reason2
     s.abort()
     rec.ended.wait(5)
+
+
+def test_dnf_after_solve_advance_rejected(harness):
+    s, rec, *_ = harness()
+    s.start()
+    advance_when(s, engine.CONFIGURED)
+    advance_when(s, engine.PLAN)
+    wait_for_state(s, engine.SOLVE)
+    with s._lock:
+        ok, _ = s.advance(engine.SOLVE)
+        assert ok
+        # solve is ending: a late DNF must be rejected, never silently lost
+        ok2, reason = s.flag_dnf()
+    assert not ok2 and "ending" in reason
+    advance_when(s, engine.BREAK)
+    advance_when(s, engine.PLAN)
+    advance_when(s, engine.SOLVE)
+    assert rec.ended.wait(5)
+    assert all(t["dnf"] is False for t in s.session_dict["trials"])
 
 
 def test_ticks_emitted(harness):

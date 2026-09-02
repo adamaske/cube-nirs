@@ -191,6 +191,7 @@ class Session:
         self._wake = threading.Event()
         self._advance_pending = False
         self._dnf_pending = False
+        self._solve_closing = False
         self._abort_pending = False
         self.state = IDLE
         self._state_entered = self.clock.now()
@@ -229,6 +230,8 @@ class Session:
         with self._lock:
             if self.state != SOLVE:
                 return self._reject("dnf", f"DNF only valid during solve (state={self.state})")
+            if self._advance_pending or self._solve_closing:
+                return self._reject("dnf", "solve already ending; DNF not recorded")
             if self._dnf_pending:
                 return True, ""
             self._dnf_pending = True
@@ -316,8 +319,10 @@ class Session:
                             remaining=round(remaining, 1), elapsed=None))
             self.clock.wait(self._wake, min(TICK_INTERVAL, remaining))
 
-    def _self_paced_block(self) -> float:
-        """Wait for an accepted advance; returns elapsed seconds."""
+    def _self_paced_block(self, capture_dnf: bool = False) -> tuple[float, bool]:
+        """Wait for an accepted advance; returns (elapsed seconds, dnf flag).
+        The DNF flag is read atomically with the advance that ends the solve,
+        so a flag_dnf() can never be accepted and then silently discarded."""
         t0 = self._state_entered
         while True:
             self._check_abort()
@@ -325,7 +330,12 @@ class Session:
                 if self._advance_pending:
                     self._advance_pending = False
                     self._wake.clear()
-                    return self.clock.now() - t0
+                    dnf = False
+                    if capture_dnf:
+                        self._solve_closing = True
+                        dnf = self._dnf_pending
+                        self._dnf_pending = False
+                    return self.clock.now() - t0, dnf
             self._emit(Tick(state=self.state, trial=self.trial_i,
                             remaining=None,
                             elapsed=round(self.clock.now() - t0, 1)))
@@ -359,10 +369,8 @@ class Session:
                 trial["t_solve"] = m["t_lsl"] or m["t_wall"]
                 with self._lock:
                     self._dnf_pending = False
-                self._self_paced_block()
-                with self._lock:
-                    dnf = self._dnf_pending
-                    self._dnf_pending = False
+                    self._solve_closing = False
+                _, dnf = self._self_paced_block(capture_dnf=True)
 
                 self._set_state(REST_POST)
                 m = self._mark("REST_POST")
@@ -383,7 +391,7 @@ class Session:
                     self.scramble = self.scramble_fn(cfg.scramble_len, self.seed + i)
                     self._set_state(BREAK)
                     self._mark("BREAK")
-                    trial["break_s"] = round(self._self_paced_block(), 1)
+                    trial["break_s"] = round(self._self_paced_block()[0], 1)
                     self._save()
 
                 self.store.append_solve({

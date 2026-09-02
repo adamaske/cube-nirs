@@ -23,9 +23,9 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 
 from app.server import engine  # noqa: E402
+from app.server.beeper import Beeper  # noqa: E402
 from app.server.engine import Session, SessionConfig  # noqa: E402
 from app.server.store import Store  # noqa: E402
-from scripts import beep as beep_mod  # noqa: E402
 from scripts import scramble as scramble_gen  # noqa: E402
 
 DIST = os.path.join(ROOT, "app", "web", "dist")
@@ -75,11 +75,6 @@ class AbortCmd(BaseModel):
 COMMANDS = {"start": StartCmd, "advance": AdvanceCmd, "dnf": DnfCmd, "abort": AbortCmd}
 
 
-class Beeper:
-    def cue(self, times: int = 1):
-        beep_mod.beep(times=times)
-
-
 def default_session_factory(config: SessionConfig, emit) -> Session:
     """Builds a Session with real dependencies. Raises if the LSL outlet
     cannot be created (running unmarked silently is the worst failure mode)."""
@@ -120,12 +115,23 @@ class Hub:
             except asyncio.QueueFull:
                 if msg.get("type") == "tick":
                     continue  # a slow client just loses stale ticks
-                # never drop a state change: evict the oldest queued message
-                try:
-                    q.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-                q.put_nowait(msg)
+                # never drop a state change: evict a stale tick if there is
+                # one, otherwise the oldest queued message
+                items = []
+                while True:
+                    try:
+                        items.append(q.get_nowait())
+                    except asyncio.QueueEmpty:
+                        break
+                for i, it in enumerate(items):
+                    if it.get("type") == "tick":
+                        del items[i]
+                        break
+                else:
+                    items = items[1:]
+                items.append(msg)
+                for it in items:
+                    q.put_nowait(it)
 
 
 # --------------------------------------------------------------------------- #
@@ -220,17 +226,18 @@ def create_app(store: Store | None = None,
     app.state.supervisor = supervisor
 
     # ---- REST ------------------------------------------------------------- #
-    defaults = {"config": StartConfig().model_dump(), "advance_mode": "both"}
+    # in-memory saved setup-form values, served back as the form's prefill
+    saved_config = {"config": StartConfig().model_dump(), "advance_mode": "both"}
 
     @app.get("/api/config")
     def get_config():
-        return defaults
+        return saved_config
 
     @app.post("/api/config")
     def post_config(cfg: StartConfig, advance_mode: AdvanceMode = "both"):
-        defaults["config"] = cfg.model_dump()
-        defaults["advance_mode"] = advance_mode
-        return defaults
+        saved_config["config"] = cfg.model_dump()
+        saved_config["advance_mode"] = advance_mode
+        return saved_config
 
     @app.get("/api/next-session")
     def next_session(subject: int):

@@ -35,16 +35,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from app.server import engine  # noqa: E402
+from app.server.beeper import Beeper  # noqa: E402
 from app.server.engine import Session, SessionConfig  # noqa: E402
 from app.server.lsl_out import MarkerOutlet, NullOutlet  # noqa: E402
 from app.server.store import Store  # noqa: E402
-from scripts import beep as beep_mod  # noqa: E402
 from scripts import scramble as scramble_gen  # noqa: E402
-
-
-class Beeper:
-    def cue(self, times: int = 1):
-        beep_mod.beep(times=times)
 
 
 def main():
@@ -140,6 +135,9 @@ def main():
         scramble_fn=scramble_gen.generate,
         emit=render,
         started=started,
+        # the old input()-driven CLI had no double-advance guard; a single
+        # keyboard doesn't need one, and dwell would inflate plan_s/solve_s
+        dwell_s=0.0,
     )
 
     print("=" * 70)
