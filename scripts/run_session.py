@@ -13,6 +13,9 @@ Usage:
     python scripts/run_session.py --no-lsl          # dry run without pylsl
     python scripts/run_session.py --scramble-len 25 --rest-post 60
 
+Audio: a 1 kHz beep (200 ms) sounds when a timed rest ends (start of PLAN,
+start of BREAK); a double beep marks the end of the session. --no-beep disables it.
+
 Controls during a session:
     ENTER  advance a self-paced block (PLAN -> SOLVE -> REST_POST) or end the break
     d      (typed before ENTER at the end of SOLVE) flag the solve as DNF
@@ -30,6 +33,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from triggers import TRIGGERS, code  # noqa: E402
 import scramble as scramble_gen  # noqa: E402
+import beep as beep_mod  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(ROOT, "logs")
@@ -127,6 +131,7 @@ def main():
     p.add_argument("--stream-type", default="Markers")
     p.add_argument("--source-id", default="cube-nirs")
     p.add_argument("--no-lsl", action="store_true", help="dry run without pushing LSL markers")
+    p.add_argument("--no-beep", action="store_true", help="disable the 1 kHz audio cue")
     p.add_argument("--comment", default="")
     args = p.parse_args()
 
@@ -173,6 +178,10 @@ def main():
 
     outlet = MarkerOutlet(not args.no_lsl, args.stream_name, args.stream_type, args.source_id)
 
+    def cue(times=1):
+        if not args.no_beep:
+            beep_mod.beep(times=times)
+
     def mark(name):
         m = outlet.push(name)
         session["markers"].append(m)
@@ -197,6 +206,7 @@ def main():
             trial["t_rest_pre"] = m["t_lsl"] or m["t_wall"]
             countdown("REST", args.rest_pre, "PLAN")
 
+            cue()
             m = mark("PLAN")
             trial["t_plan"] = m["t_lsl"] or m["t_wall"]
             wait_enter("  [PLAN] Pick up the cube and inspect. Press ENTER at your FIRST TURN...")
@@ -214,6 +224,7 @@ def main():
             trial["solve_s"] = round(trial["t_rest_post"] - trial["t_solve"], 3)
             print(f"  plan {trial['plan_s']:.1f} s | solve {trial['solve_s']:.1f} s" + ("  (DNF)" if trial["dnf"] else ""))
             countdown("REST", args.rest_post, "BREAK" if i < args.trials else "END")
+            cue(times=1 if i < args.trials else 2)
 
             session["trials"].append(trial)
             completed_trials = i
